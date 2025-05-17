@@ -1,20 +1,5 @@
 <template>
   <div class="chat-layout-container">
-    <!-- Sidebar -->
-    <div class="sidebar">
-      <div class="sidebar-header">
-        <span class="sidebar-logo">Rico</span>
-        <button class="sidebar-collapse-btn">‹</button>
-      </div>
-      <nav class="sidebar-nav">
-        <ul>
-          <li><a href="#" class="nav-item"><span>📊</span> Dashboard</a></li>
-          <li><a href="#" class="nav-item active"><span>💬</span> Ask Rico</a></li>
-          <li><a href="#" class="nav-item"><span>⚙️</span> Settings</a></li>
-        </ul>
-      </nav>
-    </div>
-
     <!-- Main Chat Area -->
     <div class="chat-view-container">
       <div class="chat-header">
@@ -270,69 +255,6 @@ nextTick(() => {
   background-color: #1A1D21; /* Main Background */
   color: #E2E8F0; /* Light gray/off-white text */
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-}
-
-/* Sidebar */
-.sidebar {
-  width: 260px;
-  background-color: #1A1D21; /* Sidebar background */
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  border-right: 1px solid #2D3748; /* Separator */
-}
-
-.sidebar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 30px;
-}
-
-.sidebar-logo {
-  font-size: 1.8em;
-  font-weight: bold;
-  color: #E2E8F0;
-}
-
-.sidebar-collapse-btn {
-  background: none;
-  border: none;
-  color: #A0AEC0; /* Lighter gray for icon */
-  font-size: 1.5em;
-  cursor: pointer;
-}
-
-.sidebar-nav ul {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.sidebar-nav .nav-item {
-  display: flex;
-  align-items: center;
-  padding: 12px 15px;
-  margin-bottom: 8px;
-  border-radius: 8px;
-  text-decoration: none;
-  color: #A0AEC0; /* Lighter gray for nav items */
-  transition: background-color 0.2s, color 0.2s;
-}
-.sidebar-nav .nav-item span {
-  margin-right: 10px;
-  font-size: 1.2em;
-}
-
-.sidebar-nav .nav-item:hover {
-  background-color: #2D3748; /* Slightly lighter dark gray */
-  color: #E2E8F0;
-}
-
-.sidebar-nav .nav-item.active {
-  background-color: #14B8A6; /* Teal/Cyan accent */
-  color: #0F172A; /* Darker text for active item */
-  font-weight: 500;
 }
 
 /* Main Chat View Container */
