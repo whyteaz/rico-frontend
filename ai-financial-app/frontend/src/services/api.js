@@ -78,3 +78,13 @@ export const getDashboardData = () => {
 };
 
 export default apiClient;
+
+/**
+ * Sends a chat message with V2 of the API, supporting FormData.
+ * @param {FormData} formData - The form data containing message, session_id, and optionally files.
+ * @returns {Promise<Object>} The API response.
+ */
+export const sendChatMessageV2 = (formData) => {
+  return apiClient.post('/api/v2/chat', formData);
+  // Axios will automatically set Content-Type to multipart/form-data for FormData
+};

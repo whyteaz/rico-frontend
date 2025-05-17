@@ -11,6 +11,7 @@ This file tracks the project's current status, including recent changes, current
 *   [2025-05-17 19:13:48] - Debugging `POST /api/upload` 500 Error: Changed Alibaba Bailian SDK calls in [`ai-financial-app/backend/server.js`](ai-financial-app/backend/server.js:1) to use plain objects for request parameters instead of `new SDK.RequestObject()`. Awaiting test results.
 *   [2025-05-17 19:16:14] - Removed keep-alive interval logging from [`ai-financial-app/backend/server.js`](ai-financial-app/backend/server.js:1) as it's no longer needed for diagnosing server startup.
 ## Current Focus
+*   [2025-05-18 00:15:14] - Debugging Qwen API 422 Error: Modified [`ai-financial-app/backend/services/qwenExternalApiService.js`](ai-financial-app/backend/services/qwenExternalApiService.js:1) to always send the `message` field, even if empty, when a file is uploaded. This is to resolve the "Field required" error from the Qwen API.
 
 *   [2025-05-17 15:14:00] - Current focus is completing Phase 5, Part 1: Prepare for Vercel Deployment. Created `vercel.json` and made backend adjustments.
 *   [2025-05-17 15:11:12] - Current focus is completing Phase 4: Dashboard & Data Visualization. Frontend display and charting are implemented. Next is Phase 5: Refinement, Testing & Vercel Deploy.

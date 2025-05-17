@@ -1,142 +1,126 @@
 <template>
   <div class="chat-view">
-    <h1>Chat with Your Financial Statement</h1>
-    <p>Upload your PDF bank statement to get started.</p>
+    <h1>Chat with Qwen Service</h1>
+    <p>Ask questions and optionally attach a PDF document.</p>
 
-    <div class="upload-section">
-      <input type="file" @change="handleFileSelect" accept=".pdf" ref="fileInputRef" />
-      <button @click="handleFileUpload" :disabled="!selectedFile">Upload Statement</button>
-      <p v-if="uploadMessage">{{ uploadMessage }}</p>
-    </div>
-
-    <div class="chat-interface" v-if="uploadMessage.includes('Success')">
-      <h2>Ask about your statement:</h2>
+    <div class="chat-interface">
+      <h2>Conversation:</h2>
       <div class="conversation-area">
         <div v-for="(message, index) in conversation" :key="index" :class="['message', message.sender]">
           <p><strong>{{ message.sender === 'user' ? 'You' : 'AI' }}:</strong> {{ message.text }}</p>
         </div>
       </div>
       <div class="input-area">
-        <input type="text" v-model="userMessage" @keyup.enter="sendChatMessage" placeholder="Type your question..." />
-        <button @click="sendChatMessage" :disabled="!userMessage.trim()">Send</button>
+        <input type="text" v-model="userMessage" @keyup.enter="handleSendMessage" placeholder="Type your question..." />
+        <input type="file" @change="handleFileSelect" accept=".pdf" ref="fileInputRef" class="file-input" />
+        <button @click="handleSendMessage" :disabled="!userMessage.trim() && !selectedFile">Send</button>
       </div>
+      <p v-if="selectedFile" class="selected-file-info">Selected file: {{ selectedFile.name }}</p>
       <p v-if="chatError" class="error-message">{{ chatError }}</p>
-    </div>
-    <div v-else-if="uploadMessage && !uploadMessage.includes('Success') && !uploadMessage.includes('Uploading')">
-        <p class="info-message">Please upload a statement successfully to enable chat.</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue';
-import { uploadPdf, sendMessage } from '../services/api';
+import { ref, onMounted } from 'vue';
+import { sendChatMessageV2 } from '../services/api'; // Updated import
 
 const selectedFile = ref(null);
-const fileInputRef = ref(null); // To potentially reset the file input
-const uploadMessage = ref('');
+const fileInputRef = ref(null);
 const userMessage = ref('');
 const conversation = ref([]);
 const chatError = ref('');
+const sessionId = ref(null);
+
+onMounted(() => {
+  let storedSessionId = localStorage.getItem('chatSessionId');
+  if (!storedSessionId) {
+    storedSessionId = crypto.randomUUID();
+    localStorage.setItem('chatSessionId', storedSessionId);
+  }
+  sessionId.value = storedSessionId;
+});
 
 const handleFileSelect = (event) => {
   const file = event.target.files[0];
   if (file && file.type === 'application/pdf') {
     selectedFile.value = file;
-    uploadMessage.value = ''; // Clear previous messages
+    chatError.value = ''; // Clear previous errors
   } else {
     selectedFile.value = null;
-    if (file) { // if a file was selected but wasn't a PDF
-        uploadMessage.value = 'Please select a PDF file.';
+    if (file) {
+      chatError.value = 'Please select a PDF file.';
     }
-    // Optionally reset the file input if a non-PDF is selected
     if (fileInputRef.value) {
-        fileInputRef.value.value = '';
+      fileInputRef.value.value = '';
     }
   }
 };
 
-const handleFileUpload = async () => {
-  if (!selectedFile.value) {
-    uploadMessage.value = 'Please select a file first.';
+const handleSendMessage = async () => {
+  if (!userMessage.value.trim() && !selectedFile.value) {
+    chatError.value = 'Please enter a message or select a file.';
     return;
   }
+
+  const currentMessageText = userMessage.value.trim();
+  if (currentMessageText) {
+    conversation.value.push({ sender: 'user', text: currentMessageText });
+  }
+  if (selectedFile.value) {
+    // Optionally, add a message indicating a file is being sent
+    conversation.value.push({ sender: 'user', text: `(Sending file: ${selectedFile.value.name})` });
+  }
+  
+  chatError.value = '';
 
   const formData = new FormData();
-  formData.append('pdfFile', selectedFile.value);
-  uploadMessage.value = 'Uploading...';
+  formData.append('message', currentMessageText);
+  formData.append('session_id', sessionId.value);
+
+  if (selectedFile.value) {
+    formData.append('files', selectedFile.value);
+  }
 
   try {
-    // const response = await fetch(NEW_API_ENDPOINT, { // Old fetch call
-    //   method: 'POST',
-    //   body: formData,
-    // });
-    // const result = await response.json();
+    const response = await sendChatMessageV2(formData);
+    const result = response.data;
 
-    const response = await uploadPdf(formData); // Use API service
-    const result = response.data; // Axios wraps response in .data
+    if (result.response) {
+      conversation.value.push({ sender: 'ai', text: result.response });
+    }
+    if (result.traceback) {
+      console.log('AI Traceback:', result.traceback);
+    }
+    if (!result.response && !result.traceback) { // If response is empty but no error from backend
+        console.log('Received empty response from AI:', result);
+        // conversation.value.push({ sender: 'ai', text: '[AI returned an empty response]' });
+    }
 
-    // Assuming the backend response structure for success is { message: '...', filename: '...' }
-    // and for error is { message: '...' } or a generic error.
-    // The new API service handles fallback, so primary/local distinction is abstracted.
-
-    uploadMessage.value = `Success: ${result.message} (Filename: ${result.filename})`;
-    selectedFile.value = null; // Clear selection after successful upload
+    // Clear inputs after successful send
+    userMessage.value = '';
+    selectedFile.value = null;
     if (fileInputRef.value) {
-      fileInputRef.value.value = ''; // Reset file input
+      fileInputRef.value.value = '';
     }
+
   } catch (error) {
-    console.error('Upload error:', error);
-    if (error.response && error.response.data && error.response.data.message) {
-      uploadMessage.value = `Error: ${error.response.data.message}`;
+    console.error('Chat V2 error:', error);
+    let errorMessage = 'Failed to send message. See console for details.';
+    if (error.response && error.response.data) {
+      if (error.response.data.detail && typeof error.response.data.detail === 'string') {
+        errorMessage = `Error: ${error.response.data.detail}`;
+      } else if (error.response.data.message) {
+         errorMessage = `Error: ${error.response.data.message}`;
+      } else if (typeof error.response.data === 'string') {
+        errorMessage = `Error: ${error.response.data}`;
+      }
     } else if (error.message) {
-      uploadMessage.value = `Error: ${error.message}`;
-    } else {
-      uploadMessage.value = 'Upload failed. See console for details.';
+      errorMessage = `Error: ${error.message}`;
     }
-  }
-};
-
-const sendChatMessage = async () => {
-  if (!userMessage.value.trim()) {
-    chatError.value = 'Please enter a message.';
-    return;
-  }
-
-  const currentMessage = userMessage.value;
-  conversation.value.push({ sender: 'user', text: currentMessage });
-  userMessage.value = ''; // Clear input field
-  chatError.value = ''; // Clear previous errors
-
-  try {
-    // const response = await fetch(NEW_API_ENDPOINT, { // Old fetch call
-    //   method: 'POST',
-    //   headers: {
-    //     'Content-Type': 'application/json',
-    //   },
-    //   body: JSON.stringify({ userMessage: currentMessage }),
-    // });
-    // const result = await response.json();
-
-    const response = await sendMessage({ userMessage: currentMessage }); // Use API service
-    const result = response.data; // Axios wraps response in .data
-
-    // Assuming the backend response structure for success is { aiResponse: '...' }
-    // and for error is { error: '...' } or a generic error.
-    // The new API service handles fallback.
-
-    conversation.value.push({ sender: 'ai', text: result.aiResponse });
-  } catch (error) {
-    console.error('Chat error:', error);
-    if (error.response && error.response.data && error.response.data.error) {
-      chatError.value = `Error from AI: ${error.response.data.error}`;
-    } else if (error.message) {
-      chatError.value = `Error: ${error.message}`;
-    } else {
-      chatError.value = 'Failed to send message. See console for details.';
-    }
-    // Optionally add the error to conversation display
-    // conversation.value.push({ sender: 'system', text: `Network Error: ${error.message}` });
+    chatError.value = errorMessage;
+    // Optionally add the error to conversation display for more visibility
+    // conversation.value.push({ sender: 'system', text: errorMessage });
   }
 };
 </script>
@@ -145,102 +129,101 @@ const sendChatMessage = async () => {
 .chat-view {
   padding: 20px;
   font-family: sans-serif;
-}
-
-.upload-section {
-  margin-bottom: 20px;
-  padding: 15px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  background-color: #f9f9f9;
-}
-
-.upload-section input[type="file"] {
-  margin-right: 10px;
-}
-
-.upload-section button {
-  padding: 8px 15px;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-.upload-section button:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
-}
-
-.upload-section p {
-  margin-top: 10px;
-  font-size: 0.9em;
+  max-width: 800px;
+  margin: auto;
 }
 
 .chat-interface {
   margin-top: 20px;
   border: 1px solid #eee;
-  padding: 10px;
+  padding: 15px;
   background-color: #fff;
   border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
 }
 
 .conversation-area {
-  height: 300px;
+  height: 400px;
   overflow-y: auto;
   border: 1px solid #ddd;
   padding: 10px;
-  margin-bottom: 10px;
+  margin-bottom: 15px;
   background-color: #f9f9f9;
   border-radius: 4px;
 }
 
 .message {
-  margin-bottom: 10px;
-  padding: 8px;
-  border-radius: 4px;
-}
-
-.message.user {
-  background-color: #e1f5fe; /* Light blue for user */
-  text-align: right;
-  margin-left: auto;
-  max-width: 70%;
-}
-
-.message.ai {
-  background-color: #f0f0f0; /* Light grey for AI */
-  text-align: left;
-  margin-right: auto;
-  max-width: 70%;
-}
-
-.message p {
-  margin: 0;
+  margin-bottom: 12px;
+  padding: 10px 15px;
+  border-radius: 18px; /* More rounded bubbles */
+  line-height: 1.4;
+  max-width: 75%;
   word-wrap: break-word;
 }
 
+.message.user {
+  background-color: #007bff; /* Primary blue for user */
+  color: white;
+  text-align: left; /* Align user messages to left for consistency, or right if preferred */
+  margin-left: 0; /* Or margin-right: auto; if text-align: left */
+  margin-right: auto; /* Pushes to left if text-align: left */
+  align-self: flex-start; /* For flex context if parent is flex */
+}
+.message.user strong {
+  color: #e6efff; /* Lighter color for "You:" text */
+}
+
+.message.ai {
+  background-color: #e9ecef; /* Light grey for AI */
+  color: #333;
+  text-align: left;
+  margin-right: 0; /* Or margin-left: auto; if text-align: right */
+  margin-left: auto; /* Pushes to right if text-align: left */
+  align-self: flex-start;
+}
+.message.ai strong {
+  color: #555;
+}
+
+
 .input-area {
   display: flex;
+  align-items: center; /* Align items vertically */
   margin-top: 10px;
 }
 
 .input-area input[type="text"] {
   flex-grow: 1;
-  padding: 8px;
+  padding: 10px;
   border: 1px solid #ccc;
-  border-radius: 4px;
+  border-radius: 20px; /* Rounded input field */
   margin-right: 10px;
+  font-size: 1em;
+}
+
+.input-area .file-input {
+  /* Basic styling for file input, can be hidden and triggered by a custom button if needed */
+  margin-right: 10px;
+  border: 1px solid #ccc;
+  padding: 7px;
+  border-radius: 20px;
+  font-size: 0.9em;
+  max-width: 150px; /* Limit width */
 }
 
 .input-area button {
-  padding: 8px 15px;
+  padding: 10px 20px;
   background-color: #28a745; /* Green for send */
   color: white;
   border: none;
-  border-radius: 4px;
+  border-radius: 20px; /* Rounded button */
   cursor: pointer;
+  font-size: 1em;
+  transition: background-color 0.2s;
+}
+
+.input-area button:hover {
+  background-color: #218838;
 }
 
 .input-area button:disabled {
@@ -248,14 +231,16 @@ const sendChatMessage = async () => {
   cursor: not-allowed;
 }
 
-.error-message {
-  color: red;
+.selected-file-info {
   font-size: 0.9em;
-  margin-top: 10px;
-}
-.info-message {
   color: #555;
-  font-style: italic;
+  margin-top: 5px;
+  margin-left: 5px; /* Align with text input roughly */
+}
+
+.error-message {
+  color: #dc3545; /* Bootstrap danger red */
+  font-size: 0.9em;
   margin-top: 10px;
 }
 </style>

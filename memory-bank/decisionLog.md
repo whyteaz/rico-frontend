@@ -18,6 +18,28 @@ This file records architectural and implementation decisions using a list format
 *
 ---
 ## Decision
+*   [2025-05-18 00:15:14] - Modified Qwen API request to always include the `message` field.
+
+## Rationale
+*   The Qwen API (`http://47.236.92.42:8000/chat/`) was returning a 422 error: `{"detail":[{"type":"missing","loc":["body","message"],"msg":"Field required","input":null}]}` when a file was uploaded without an accompanying text message.
+*   This occurred because the `message` field was conditionally appended to the `FormData` only if the `message` variable was truthy.
+*   To ensure the API requirement is met, the `message` field will now always be sent, with an empty string (`''`) as its value if no explicit message is provided by the user.
+
+## Implementation Details
+*   Modified [`ai-financial-app/backend/services/qwenExternalApiService.js`](ai-financial-app/backend/services/qwenExternalApiService.js:1).
+*   Changed the logic for appending the `message` to `FormData` from:
+    ```javascript
+    if (message) {
+      formData.append('message', message);
+    }
+    ```
+    to:
+    ```javascript
+    formData.append('message', message || '');
+    ```
+    This ensures the `message` field is always present in the request.
+---
+## Decision
 *   [2025-05-17 19:41:00] - Migrated frontend to use a new unified chat API endpoint (`http://47.236.92.42:8000/chat`) for both PDF uploads and text messages.
 
 ## Rationale

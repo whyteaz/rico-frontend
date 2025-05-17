@@ -21,6 +21,7 @@ const AlibabaBailian = require('@alicloud/bailian20230601');
 const OpenApi = require('@alicloud/openapi-client');
 // const OSS = require('ali-oss'); // Removed ali-oss
 const OpenAI = require('openai'); // Added for OpenAI compatible API
+const qwenExternalApiService = require('./services/qwenExternalApiService');
 
 // Initialize Alibaba Cloud Bailian Client (for Qwen-Turbo, Qwen-VL-Max via Bailian if needed elsewhere)
 let bailianClient;
@@ -94,6 +95,13 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 } // Limit file size to 10MB (optional)
 });
 
+// Multer configuration for the new /api/v2/chat endpoint
+// This will use the same disk storage but allow multiple files and any type by default
+const uploadChatV2 = multer({
+ storage: storage, // Reuse the same storage configuration
+ limits: { fileSize: 10 * 1024 * 1024 * 5 } // Limit file size to 50MB for potentially multiple files (optional)
+});
+
 // Middleware to parse JSON bodies
 app.use(express.json());
 
@@ -140,7 +148,14 @@ app.post('/api/upload-pdf', upload.single('pdfFile'), async (req, res) => {
             role: 'user',
             content: [
               { type: 'text', text: userPromptText },
-              { type: 'image_url', image_url: { url: `data:application/pdf;base64,${pdfBase64String}` } }
+              {
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: 'application/pdf',
+                  data: pdfBase64String
+                }
+              }
             ]
           }
         ],
@@ -439,6 +454,65 @@ app.get('/api/dashboard-data', async (req, res) => {
       exceptionDetails: errorDetails
     });
   }
+});
+
+// New API route for Qwen Chat Service integration
+app.post('/api/v2/chat', uploadChatV2.array('files', 5), async (req, res) => {
+ const { message, session_id } = req.body;
+ const files = req.files; // files will be an array of file objects from multer
+
+ // Basic validation
+ if (!message && (!files || files.length === 0)) {
+   return res.status(400).json({ error: "Either message or files must be provided." });
+ }
+ // session_id is optional based on Qwen API, but good to pass if available
+
+ try {
+   console.log(`Received request for /api/v2/chat. Session ID: ${session_id}, Message: ${message ? message.substring(0,50)+'...' : 'N/A'}, Files: ${files ? files.length : 0}`);
+   const serviceResponse = await qwenExternalApiService.forwardChatRequest(message, session_id, files);
+   
+   // Clean up uploaded files after successful forwarding if they were saved to disk by multer
+   if (files && files.length > 0) {
+     files.forEach(file => {
+       if (file.path && fs.existsSync(file.path)) {
+         fs.unlink(file.path, (unlinkErr) => {
+           if (unlinkErr) {
+             console.error(`Error deleting temporary file ${file.path} for /api/v2/chat:`, unlinkErr);
+           } else {
+             console.log(`Temporary file ${file.path} deleted successfully for /api/v2/chat.`);
+           }
+         });
+       }
+     });
+   }
+   
+   res.json(serviceResponse);
+ } catch (error) {
+   console.error('Error in /api/v2/chat endpoint:', error.message);
+   // Clean up uploaded files in case of error during service call
+   if (files && files.length > 0) {
+     files.forEach(file => {
+       if (file.path && fs.existsSync(file.path)) {
+         fs.unlink(file.path, (unlinkErr) => {
+           if (unlinkErr) {
+             console.error(`Error deleting temporary file ${file.path} after error in /api/v2/chat:`, unlinkErr);
+           } else {
+             console.log(`Temporary file ${file.path} deleted successfully after error in /api/v2/chat.`);
+           }
+         });
+       }
+     });
+   }
+   
+   // Check if the error has a status code (e.g., from Axios error in the service)
+   const statusCode = error.response && error.response.status ? error.response.status : 500;
+   const errorDetail = error.response && error.response.data ? error.response.data : error.message;
+   
+   res.status(statusCode).json({
+     error: "Failed to process chat request via Qwen service.",
+     details: errorDetail
+   });
+ }
 });
 
 console.log(`Attempting to start server on port ${port}...`);

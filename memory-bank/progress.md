@@ -41,6 +41,16 @@ This file tracks the project's progress using a task list format.
     *   Installed `axios` in [`ai-financial-app/frontend`](ai-financial-app/frontend/).
     *   Created API service module [`ai-financial-app/frontend/src/services/api.js`](ai-financial-app/frontend/src/services/api.js:0) with `axios` interceptor for fallback to `http://localhost:3000`.
     *   Refactored [`ai-financial-app/frontend/src/views/ChatView.vue`](ai-financial-app/frontend/src/views/ChatView.vue:0) and [`ai-financial-app/frontend/src/views/DashboardView.vue`](ai-financial-app/frontend/src/views/DashboardView.vue:0) to use the new API service.
+*   [2025-05-18] - Implemented new chat and PDF upload/analysis method using external Qwen API (http://47.236.92.42:8000/chat/). This involved backend proxy (`/api/v2/chat`), frontend updates in `ChatView.vue` and `api.js`, and creation of planning and summary documents ([`docs/new_qwen_chat_service_plan.md`](docs/new_qwen_chat_service_plan.md:0), [`docs/qwen_external_chat_integration_summary.md`](docs/qwen_external_chat_integration_summary.md:0)). Classified as a Large change.
+    *   Key files:
+        *   [`ai-financial-app/backend/server.js`](ai-financial-app/backend/server.js:0)
+        *   [`ai-financial-app/backend/services/qwenExternalApiService.js`](ai-financial-app/backend/services/qwenExternalApiService.js:0)
+        *   [`ai-financial-app/frontend/src/services/api.js`](ai-financial-app/frontend/src/services/api.js:0)
+        *   [`ai-financial-app/frontend/src/views/ChatView.vue`](ai-financial-app/frontend/src/views/ChatView.vue:0)
+        *   [`docs/new_qwen_chat_service_plan.md`](docs/new_qwen_chat_service_plan.md:0)
+        *   [`docs/qwen_external_chat_integration_summary.md`](docs/qwen_external_chat_integration_summary.md:0)
+*   [2025-05-18 00:15:14] - Debug: Resolved Qwen API 422 error for file uploads by ensuring the `message` field is always sent in [`ai-financial-app/backend/services/qwenExternalApiService.js`](ai-financial-app/backend/services/qwenExternalApiService.js:1).
+
 ## Current Tasks
 
 *   All parts of Phase 4 are now complete.
