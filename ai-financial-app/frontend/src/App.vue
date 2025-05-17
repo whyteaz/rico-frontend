@@ -2,12 +2,9 @@
   <div id="app">
     <nav class="sidebar">
       <ul>
-        <li><router-link to="/">Chat</router-link></li>
-        <li><router-link to="/dashboard">Dashboard</router-link></li>
-        <li><router-link to="/settings">Settings</router-link></li>
-        <!-- Placeholders for Transactions and Insights as per PLAN.md -->
-        <li class="disabled"><a href="#">Transactions (MVP omit)</a></li>
-        <li class="disabled"><a href="#">Insights (MVP omit)</a></li>
+        <li><router-link to="/"><font-awesome-icon icon="comments" style="margin-right: 10px;" /> <span>Ask Rico</span></router-link></li>
+        <li><router-link to="/dashboard"><font-awesome-icon icon="home" style="margin-right: 10px;" /> <span>Dashboard</span></router-link></li>
+        <li><router-link to="/settings"><font-awesome-icon icon="cog" style="margin-right: 10px;" /> <span>Settings</span></router-link></li>
       </ul>
     </nav>
     <main class="content">
