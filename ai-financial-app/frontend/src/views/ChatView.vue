@@ -1,52 +1,76 @@
 <template>
-  <div class="chat-view-container">
-    <div class="chat-header">
-      <h1 class="header-title">Rico @ Finance-AI Trained</h1>
-      <p class="header-tagline">Talked to understand your wallet, not just your words.</p>
+  <div class="chat-layout-container">
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <span class="sidebar-logo">Rico</span>
+        <button class="sidebar-collapse-btn">‹</button>
+      </div>
+      <nav class="sidebar-nav">
+        <ul>
+          <li><a href="#" class="nav-item"><span>📊</span> Dashboard</a></li>
+          <li><a href="#" class="nav-item active"><span>💬</span> Ask Rico</a></li>
+          <li><a href="#" class="nav-item"><span>⚙️</span> Settings</a></li>
+        </ul>
+      </nav>
     </div>
 
-    <div class="chat-messages-area" ref="chatMessagesAreaRef">
-      <div v-for="message in messages" :key="message.id" :class="['message', message.sender === 'user' ? 'user-message' : 'rico-message']">
-        <div class="message-content">
-          <p>{{ message.text }}</p>
+    <!-- Main Chat Area -->
+    <div class="chat-view-container">
+      <div class="chat-header">
+        <img src="../assets/rico.jpeg" alt="Rico Avatar" class="rico-avatar-header" />
+        <div class="header-info">
+          <h1 class="header-title">Rico</h1>
+          <span class="header-tag">Finance-AI Trained</span>
         </div>
-        <span class="message-timestamp">{{ message.timestamp || 'just now' }}</span>
+        <p class="header-tagline">Trained to understand your wallet, not just your words.</p>
       </div>
-      <!-- Suggestion buttons can be shown conditionally, e.g., only if last message is from AI and has suggestions -->
-      <div class="suggestion-buttons" v-if="messages.length === 1 && messages[0].sender === 'ai'">
-        <button class="suggestion-btn" @click="handleSuggestionClick">Let's go 👉</button>
-        <button class="suggestion-btn" @click="handleSuggestionClick">What can you do? 🤔</button>
-        <button class="suggestion-btn" @click="handleSuggestionClick">Show can buying demo</button>
-      </div>
-    </div>
 
-    <div class="chat-input-area">
-      <div class="pdf-upload-area">
-        <label for="pdf-upload-input" class="pdf-upload-label">Upload PDF Statement:</label>
-        <input
-          type="file"
-          id="pdf-upload-input"
-          ref="fileInputRef"
-          @change="handleFileUpload"
-          accept=".pdf"
-          class="pdf-upload-input"
-        />
+      <div class="chat-messages-area" ref="chatMessagesAreaRef">
+        <div v-for="message in messages" :key="message.id" :class="['message', message.sender === 'user' ? 'user-message' : 'rico-message']">
+          <img v-if="message.sender === 'ai'" src="../assets/rico.jpeg" alt="Rico Avatar" class="rico-avatar-message" />
+          <div class="message-content-wrapper">
+            <div class="message-content" v-if="message.sender === 'ai'" v-html="markdownToHtml(message.text)"></div>
+            <div class="message-content" v-else><p>{{ message.text }}</p></div>
+            <span class="message-timestamp">{{ message.timestamp || 'just now' }}</span>
+          </div>
+        </div>
+        <!-- Suggestion buttons -->
+        <div class="suggestion-buttons-container" v-if="messages.length > 0 && messages[messages.length - 1].sender === 'ai' && messages[messages.length -1].text.includes('?')">
+           <!-- Example, real condition might be more complex based on API response -->
+          <button class="suggestion-btn" @click="handleSuggestionClick('Explain this further')">Explain this further</button>
+          <button class="suggestion-btn" @click="handleSuggestionClick('What are my options?')">What are my options?</button>
+          <button class="suggestion-btn" @click="handleSuggestionClick('How does this affect my budget?')">How does this affect my budget?</button>
+        </div>
       </div>
-      <div class="input-wrapper">
-        <span class="input-icon">✏️</span> <!-- Placeholder pencil icon -->
-        <input
-          type="text"
-          placeholder="Ask Rico anything about your finances..."
-          class="text-input"
-          v-model="chatInputValue"
-          @keyup.enter="handleSendMessage"
-        />
-        <button class="send-button" @click="handleSendMessage">
-          <span>Send</span>
-          <span class="send-icon">➢</span> <!-- Paper plane icon placeholder -->
-        </button>
+
+      <div class="chat-input-area">
+        <div class="input-wrapper">
+          <label for="pdf-upload-input" class="attachment-btn">
+            <span>📎</span>
+            <input
+              type="file"
+              id="pdf-upload-input"
+              ref="fileInputRef"
+              @change="handleFileUpload"
+              accept=".pdf"
+              style="display: none;"
+            />
+          </label>
+          <input
+            type="text"
+            placeholder="Ask Rico anything about your finances..."
+            class="text-input"
+            v-model="chatInputValue"
+            @keyup.enter="handleSendMessage"
+          />
+          <button class="send-button" @click="handleSendMessage">
+            <span>Send</span>
+            <span class="send-icon">➤</span>
+          </button>
+        </div>
+        <p class="pro-tip">Pro tip: Drag and drop your bank statement PDF or CSV directly onto Rico!</p>
       </div>
-      <p class="pro-tip">Pro tip: Upload your bank statement PDF above, then ask questions!</p>
     </div>
   </div>
 </template>
@@ -62,16 +86,37 @@ const sessionId = ref('');
 const pdfProcessingStatus = ref(''); // '', 'processing', 'success', 'error'
 const lastUploadedFileName = ref('');
 
+// Basic Markdown to HTML converter
+const markdownToHtml = (markdown) => {
+  if (!markdown) return '';
+  let html = markdown;
+  // Bold: **text** or __text__
+  html = html.replace(/\*\*(.*?)\*\*|__(.*?)__/g, '<strong>$1$2</strong>');
+  // Italics: *text* or _text_
+  html = html.replace(/\*(.*?)\*|_(.*?)_/g, '<em>$1$2</em>');
+  // Unordered lists: - item or * item
+  html = html.replace(/^- (.*$)/gm, '<ul>\n  <li>$1</li>\n</ul>');
+  html = html.replace(/^\* (.*$)/gm, '<ul>\n  <li>$1</li>\n</ul>');
+  // Consolidate multiple <ul> tags from adjacent list items
+  html = html.replace(/<\/ul>\s*<ul>/gm, '');
+  // Paragraphs (simple handling for now)
+  // html = html.split(/\n\n+/).map(p => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
+  // For now, let's just replace newlines with <br> for simplicity within message bubbles
+  html = html.replace(/\n/g, '<br>');
+  return html;
+};
+
+
 onMounted(() => {
   sessionId.value = `session-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 });
 
 const messages = ref([
-  { 
-    id: Date.now(), 
-    text: 'Hey there, I\'m Rico, your finance buddy! Ready to make money stuff way less hectic and a lot more manageable?', 
+  {
+    id: Date.now(),
+    text: 'Hey there, I\'m Rico, your finance buddy! Ready to make money stuff way less hectic and a lot more manageable?\n\nTry asking:\n- What can you do?\n- How can you help me with my budget?',
     sender: 'ai', // 'ai' or 'rico'
-    timestamp: 'less than a minute ago' 
+    timestamp: 'less than a minute ago'
   }
 ]);
 
@@ -84,11 +129,10 @@ const scrollToBottom = () => {
   });
 };
 
-const handleSuggestionClick = (event) => {
-  const buttonText = event.target.textContent;
-  chatInputValue.value = buttonText;
-  // Optionally, send the suggestion as a message immediately
-  // handleSendMessage();
+const handleSuggestionClick = (suggestionText) => {
+  // const buttonText = event.target.textContent; // No longer using event.target
+  chatInputValue.value = suggestionText;
+  handleSendMessage(); // Send the suggestion as a message immediately
 };
 
 const handleFileUpload = async (event) => {
@@ -119,19 +163,13 @@ const handleFileUpload = async (event) => {
   const formData = new FormData();
   formData.append('files', file); // Key is 'files' as per api.js comment
   formData.append('session_id', sessionId.value);
-  // Optionally, send an empty message or a system message if the API requires a 'message' field
-  // formData.append('message', '');
 
   try {
     const response = await sendChatMessageV2(formData);
-    
-    // Remove "processing" message
-    messages.value.pop();
+    messages.value.pop(); // Remove "processing" message
 
     if (response && response.data) {
-      // Assuming the response for a file upload might be a confirmation or initial analysis
       let responseText = response.data.reply || response.data.message || `Successfully uploaded ${lastUploadedFileName.value}. You can now ask questions about it.`;
-      
       const successMessage = {
         id: Date.now(),
         text: responseText,
@@ -146,7 +184,7 @@ const handleFileUpload = async (event) => {
   } catch (error) {
     console.error('Error uploading or processing PDF via sendChatMessageV2:', error);
     if (messages.value.length > 0 && messages.value[messages.value.length - 1].text.startsWith('Processing')) {
-      messages.value.pop(); // Remove "processing" message if still there
+      messages.value.pop();
     }
     const errorMessageText = error.response?.data?.error || error.response?.data?.message || error.message || `Could not process ${lastUploadedFileName.value}.`;
     const pdfError = {
@@ -180,14 +218,11 @@ const handleSendMessage = async () => {
   scrollToBottom();
 
   const formData = new FormData();
-  formData.append('message', text); // Key is 'message'
+  formData.append('message', text);
   formData.append('session_id', sessionId.value);
-  // If a file was just uploaded and the API requires file context to be re-sent or referenced,
-  // that logic would go here. For now, assuming session_id handles context.
 
   try {
     const response = await sendChatMessageV2(formData);
-    
     let aiReplyText = "Sorry, I couldn't get a response.";
     if (response && response.data) {
         aiReplyText = response.data.reply || response.data.message || aiReplyText;
@@ -221,7 +256,6 @@ const handleSendMessage = async () => {
   }
 };
 
-// Initial scroll to bottom
 nextTick(() => {
   scrollToBottom();
 });
@@ -229,33 +263,130 @@ nextTick(() => {
 </script>
 
 <style scoped>
-.chat-view-container {
+/* Overall Layout */
+.chat-layout-container {
+  display: flex;
+  height: 100vh;
+  background-color: #1A1D21; /* Main Background */
+  color: #E2E8F0; /* Light gray/off-white text */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+}
+
+/* Sidebar */
+.sidebar {
+  width: 260px;
+  background-color: #1A1D21; /* Sidebar background */
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  height: 100vh; /* Or a fixed height as per design */
-  max-width: 800px; /* Or as per design */
-  margin: auto;
-  background-color: #f0f2f5; /* Light grey background, adjust as per screenshot */
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  border-right: 1px solid #2D3748; /* Separator */
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+
+.sidebar-logo {
+  font-size: 1.8em;
+  font-weight: bold;
+  color: #E2E8F0;
+}
+
+.sidebar-collapse-btn {
+  background: none;
+  border: none;
+  color: #A0AEC0; /* Lighter gray for icon */
+  font-size: 1.5em;
+  cursor: pointer;
+}
+
+.sidebar-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sidebar-nav .nav-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 15px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: #A0AEC0; /* Lighter gray for nav items */
+  transition: background-color 0.2s, color 0.2s;
+}
+.sidebar-nav .nav-item span {
+  margin-right: 10px;
+  font-size: 1.2em;
+}
+
+.sidebar-nav .nav-item:hover {
+  background-color: #2D3748; /* Slightly lighter dark gray */
+  color: #E2E8F0;
+}
+
+.sidebar-nav .nav-item.active {
+  background-color: #14B8A6; /* Teal/Cyan accent */
+  color: #0F172A; /* Darker text for active item */
+  font-weight: 500;
+}
+
+/* Main Chat View Container */
+.chat-view-container {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  /* Removed max-width and margin:auto to allow full flex growth */
 }
 
 .chat-header {
   padding: 20px;
-  text-align: center;
-  background-color: #ffffff; /* White background for header */
-  border-bottom: 1px solid #e0e0e0; /* Light border */
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #2D3748; /* Separator */
+  background-color: #1A1D21; /* Match main background */
+}
+
+.rico-avatar-header {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  margin-right: 15px;
+  background-color: #4A5568; /* Placeholder bg */
+}
+
+.header-info {
+  display: flex;
+  flex-direction: column;
 }
 
 .header-title {
-  font-size: 1.8em;
-  color: #1c1e21; /* Dark grey/black */
-  margin-bottom: 5px;
-  font-weight: 600;
+  font-size: 1.3em; /* Adjusted size */
+  color: #E2E8F0;
+  margin: 0;
+  font-weight: bold;
+}
+
+.header-tag {
+  background-color: #14B8A6; /* Teal/Cyan accent */
+  color: #0F172A; /* Dark text */
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.75em;
+  font-weight: 500;
+  margin-top: 4px;
+  align-self: flex-start;
 }
 
 .header-tagline {
-  font-size: 0.9em;
-  color: #606770; /* Medium grey */
+  font-size: 0.85em;
+  color: #A0AEC0; /* Lighter gray */
+  margin-left: auto; /* Pushes to the right */
+  padding-right: 20px;
 }
 
 .chat-messages-area {
@@ -264,120 +395,138 @@ nextTick(() => {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
-  justify-content: flex-start; /* Align messages to the top */
 }
 
 .message {
   display: flex;
-  flex-direction: column;
-  margin-bottom: 15px;
-  max-width: 70%; /* Max width for message bubbles */
+  margin-bottom: 20px;
+  max-width: 75%;
 }
 
 .rico-message {
-  align-self: flex-start; /* Rico's messages on the left */
-}
-
-.rico-message .message-content {
-  background-color: #ffffff; /* White background for Rico's messages */
-  color: #1c1e21; /* Dark text */
-  padding: 12px 18px;
-  border-radius: 18px 18px 18px 0; /* Rounded corners, flat on bottom left */
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  align-self: flex-start;
 }
 
 .user-message {
-  align-self: flex-end; /* User's messages on the right */
+  align-self: flex-end;
+}
+
+.rico-avatar-message {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  margin-right: 12px;
+  align-self: flex-start; /* Align with top of message bubble */
+   background-color: #4A5568; /* Placeholder bg */
+}
+
+.message-content-wrapper {
+  display: flex;
+  flex-direction: column;
+}
+
+.message-content {
+  padding: 12px 18px;
+  border-radius: 18px;
+  line-height: 1.6;
+}
+
+.message-content p {
+  margin: 0 0 5px 0;
+}
+.message-content p:last-child {
+  margin-bottom: 0;
+}
+.message-content strong { color: #E2E8F0; }
+.message-content em { color: #CBD5E0; }
+.message-content ul {
+  margin: 5px 0 5px 20px;
+  padding: 0;
+}
+.message-content li {
+  margin-bottom: 3px;
+}
+
+
+.rico-message .message-content {
+  background-color: #2D3748; /* Slightly lighter dark gray */
+  color: #E2E8F0;
+  border-radius: 0 18px 18px 18px;
 }
 
 .user-message .message-content {
-  background-color: #1877f2; /* Facebook blue for user messages */
-  color: white;
-  padding: 12px 18px;
-  border-radius: 18px 18px 0 18px; /* Rounded corners, flat on bottom right */
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  background-color: #14B8A6; /* Teal/Cyan accent for user messages */
+  color: #0F172A; /* Dark text for user messages */
+  border-radius: 18px 0 18px 18px;
 }
-
-.user-message .message-timestamp {
-  align-self: flex-end; /* Timestamp on the right for user messages */
-  padding-right: 10px; /* Align with message bubble */
-}
-
 
 .message-timestamp {
   font-size: 0.75em;
-  color: #8a8d91; /* Lighter grey for timestamp */
-  margin-top: 5px;
-  padding-left: 10px; /* Align with message bubble */
+  color: #718096; /* Medium-light gray for timestamp */
+  margin-top: 6px;
+}
+.rico-message .message-timestamp {
+  align-self: flex-start;
+  padding-left: 0; /* No extra padding if avatar is present */
+}
+.user-message .message-timestamp {
+  align-self: flex-end;
 }
 
-.suggestion-buttons {
+.suggestion-buttons-container {
   display: flex;
-  flex-wrap: wrap; /* Allow buttons to wrap on smaller screens */
-  gap: 10px; /* Spacing between buttons */
-  margin-top: 10px; /* Space above suggestion buttons */
-  align-self: flex-start; /* Align with Rico's message */
-  padding-left: 10px; /* Indent slightly */
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+  margin-left: 44px; /* Align with Rico's message content (avatar width + margin) */
+  align-self: flex-start;
 }
 
 .suggestion-btn {
-  background-color: #e7f3ff; /* Light blue background */
-  color: #1877f2; /* Facebook blue for text */
-  border: 1px solid #cfe2f3; /* Slightly darker blue border */
-  padding: 8px 15px;
-  border-radius: 20px; /* Pill-shaped buttons */
-  font-size: 0.9em;
+  background-color: #2D3748; /* Dark gray background */
+  color: #E2E8F0; /* Light text */
+  border: 1px solid #4A5568; /* Slightly lighter border */
+  padding: 8px 18px;
+  border-radius: 20px; /* Pill-shaped */
+  font-size: 0.85em;
   cursor: pointer;
   transition: background-color 0.2s, border-color 0.2s;
 }
 
 .suggestion-btn:hover {
-  background-color: #dcebff;
-  border-color: #b9d7f1;
+  background-color: #4A5568;
+  border-color: #718096;
 }
 
 .chat-input-area {
   padding: 15px 20px;
-  background-color: #ffffff; /* White background for input area */
-  border-top: 1px solid #e0e0e0; /* Light border */
+  background-color: #1A1D21; /* Match main background */
+  border-top: 1px solid #2D3748; /* Separator */
   display: flex;
-  flex-direction: column; /* Stack upload area and input wrapper */
-  gap: 10px; /* Space between upload and input areas */
-}
-
-.pdf-upload-area {
-  display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: 10px;
-}
-
-.pdf-upload-label {
-  font-size: 0.9em;
-  color: #333;
-}
-
-.pdf-upload-input {
-  font-size: 0.9em;
-  padding: 5px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  flex-grow: 1; /* Allow input to take available space */
 }
 
 .input-wrapper {
   display: flex;
   align-items: center;
-  background-color: #f0f2f5; /* Light grey background for the input field itself */
-  border-radius: 25px; /* Rounded wrapper */
-  padding: 5px 10px;
+  background-color: #2D3748; /* User Input Area Background */
+  border-radius: 25px;
+  padding: 8px 10px;
 }
 
-.input-icon {
-  font-size: 1.2em;
-  color: #606770; /* Icon color */
-  margin-right: 8px;
-  margin-left: 5px;
+.attachment-btn {
+  background: none;
+  border: none;
+  color: #A0AEC0; /* Lighter gray for icon */
+  font-size: 1.4em;
+  cursor: pointer;
+  padding: 5px 10px 5px 5px;
 }
+.attachment-btn:hover {
+  color: #E2E8F0;
+}
+
 
 .text-input {
   flex-grow: 1;
@@ -385,20 +534,20 @@ nextTick(() => {
   outline: none;
   padding: 10px;
   font-size: 1em;
-  background-color: transparent; /* Make input transparent to show wrapper's bg */
-  color: #1c1e21;
+  background-color: transparent;
+  color: #E2E8F0;
 }
 
 .text-input::placeholder {
-  color: #8a8d91; /* Placeholder text color */
+  color: #A0AEC0; /* Lighter gray for placeholder */
 }
 
 .send-button {
-  background-color: #1877f2; /* Facebook blue */
-  color: white;
+  background-color: #14B8A6; /* Teal/Cyan accent */
+  color: #0F172A; /* Dark text */
   border: none;
-  border-radius: 20px; /* Rounded button */
-  padding: 8px 15px;
+  border-radius: 20px;
+  padding: 10px 18px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -408,18 +557,18 @@ nextTick(() => {
 }
 
 .send-button:hover {
-  background-color: #166fe5; /* Slightly darker blue on hover */
+  background-color: #0D9488; /* Darker Teal/Cyan */
 }
 
 .send-icon {
   margin-left: 8px;
-  font-size: 1.2em; /* Make icon slightly larger */
+  font-size: 1.2em;
 }
 
 .pro-tip {
   font-size: 0.8em;
-  color: #606770; /* Medium grey */
+  color: #A0AEC0; /* Lighter gray */
   text-align: center;
-  margin-top: 10px;
+  margin-top: 5px; /* Reduced margin */
 }
 </style>
