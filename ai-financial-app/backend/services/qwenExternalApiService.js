@@ -38,7 +38,12 @@ async function forwardChatRequest(message, sessionId, files) {
       // timeout: 30000, // 30 seconds
     });
     console.log('Successfully received response from Qwen API.');
-    return response.data;
+    if (response.data && typeof response.data.response === 'string') {
+      return { reply: response.data.response };
+    } else {
+      console.error('Qwen API response is malformed. Expected "response.data.response" to be a string. Received:', response.data);
+      throw new Error('Qwen API response is malformed: "response" field is missing or not a string.');
+    }
   } catch (error) {
     console.error('Error forwarding chat request to Qwen API:', error.message);
     if (error.response) {

@@ -42,34 +42,6 @@ apiClient.interceptors.response.use(
 );
 
 /**
- * Uploads a PDF file.
- * @param {FormData} formData - The form data containing the PDF file.
- * @returns {Promise<Object>} The API response.
- */
-export const uploadPdf = (formData) => {
-  return apiClient.post('/api/upload-pdf', formData, {
-    headers: {
-      'Content-Type': 'multipart/form-data',
-    },
-  });
-};
-
-/**
- * Sends a chat message.
- * @param {Object} payload - The message payload.
- * @param {string} payload.userMessage - The user's message.
- * @returns {Promise<Object>} The API response.
- */
-export const sendMessage = (payload) => {
-  // Note: The previous implementation in ChatView.vue used a different endpoint for chat.
-  // Assuming '/api/chat' is the correct primary endpoint as per task description.
-  // If the new external API (http://47.236.92.42:8000/chat) should also have fallback,
-  // this logic would need adjustment or a separate service instance.
-  // For now, adhering to the task's primary endpoints for fallback.
-  return apiClient.post('/api/chat', payload);
-};
-
-/**
  * Fetches dashboard data.
  * @returns {Promise<Object>} The API response.
  */

@@ -1,246 +1,425 @@
 <template>
-  <div class="chat-view">
-    <h1>Chat with Qwen Service</h1>
-    <p>Ask questions and optionally attach a PDF document.</p>
+  <div class="chat-view-container">
+    <div class="chat-header">
+      <h1 class="header-title">Rico @ Finance-AI Trained</h1>
+      <p class="header-tagline">Talked to understand your wallet, not just your words.</p>
+    </div>
 
-    <div class="chat-interface">
-      <h2>Conversation:</h2>
-      <div class="conversation-area">
-        <div v-for="(message, index) in conversation" :key="index" :class="['message', message.sender]">
-          <p><strong>{{ message.sender === 'user' ? 'You' : 'AI' }}:</strong> {{ message.text }}</p>
+    <div class="chat-messages-area" ref="chatMessagesAreaRef">
+      <div v-for="message in messages" :key="message.id" :class="['message', message.sender === 'user' ? 'user-message' : 'rico-message']">
+        <div class="message-content">
+          <p>{{ message.text }}</p>
         </div>
+        <span class="message-timestamp">{{ message.timestamp || 'just now' }}</span>
       </div>
-      <div class="input-area">
-        <input type="text" v-model="userMessage" @keyup.enter="handleSendMessage" placeholder="Type your question..." />
-        <input type="file" @change="handleFileSelect" accept=".pdf" ref="fileInputRef" class="file-input" />
-        <button @click="handleSendMessage" :disabled="!userMessage.trim() && !selectedFile">Send</button>
+      <!-- Suggestion buttons can be shown conditionally, e.g., only if last message is from AI and has suggestions -->
+      <div class="suggestion-buttons" v-if="messages.length === 1 && messages[0].sender === 'ai'">
+        <button class="suggestion-btn" @click="handleSuggestionClick">Let's go 👉</button>
+        <button class="suggestion-btn" @click="handleSuggestionClick">What can you do? 🤔</button>
+        <button class="suggestion-btn" @click="handleSuggestionClick">Show can buying demo</button>
       </div>
-      <p v-if="selectedFile" class="selected-file-info">Selected file: {{ selectedFile.name }}</p>
-      <p v-if="chatError" class="error-message">{{ chatError }}</p>
+    </div>
+
+    <div class="chat-input-area">
+      <div class="pdf-upload-area">
+        <label for="pdf-upload-input" class="pdf-upload-label">Upload PDF Statement:</label>
+        <input
+          type="file"
+          id="pdf-upload-input"
+          ref="fileInputRef"
+          @change="handleFileUpload"
+          accept=".pdf"
+          class="pdf-upload-input"
+        />
+      </div>
+      <div class="input-wrapper">
+        <span class="input-icon">✏️</span> <!-- Placeholder pencil icon -->
+        <input
+          type="text"
+          placeholder="Ask Rico anything about your finances..."
+          class="text-input"
+          v-model="chatInputValue"
+          @keyup.enter="handleSendMessage"
+        />
+        <button class="send-button" @click="handleSendMessage">
+          <span>Send</span>
+          <span class="send-icon">➢</span> <!-- Paper plane icon placeholder -->
+        </button>
+      </div>
+      <p class="pro-tip">Pro tip: Upload your bank statement PDF above, then ask questions!</p>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
-import { sendChatMessageV2 } from '../services/api'; // Updated import
+import { ref, nextTick, onMounted } from 'vue';
+import { sendChatMessageV2 } from '../services/api';
 
-const selectedFile = ref(null);
-const fileInputRef = ref(null);
-const userMessage = ref('');
-const conversation = ref([]);
-const chatError = ref('');
-const sessionId = ref(null);
+const chatInputValue = ref('');
+const chatMessagesAreaRef = ref(null);
+const fileInputRef = ref(null); // To reference the file input
+const sessionId = ref('');
+const pdfProcessingStatus = ref(''); // '', 'processing', 'success', 'error'
+const lastUploadedFileName = ref('');
 
 onMounted(() => {
-  let storedSessionId = localStorage.getItem('chatSessionId');
-  if (!storedSessionId) {
-    storedSessionId = crypto.randomUUID();
-    localStorage.setItem('chatSessionId', storedSessionId);
-  }
-  sessionId.value = storedSessionId;
+  sessionId.value = `session-${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
 });
 
-const handleFileSelect = (event) => {
-  const file = event.target.files[0];
-  if (file && file.type === 'application/pdf') {
-    selectedFile.value = file;
-    chatError.value = ''; // Clear previous errors
-  } else {
-    selectedFile.value = null;
-    if (file) {
-      chatError.value = 'Please select a PDF file.';
+const messages = ref([
+  { 
+    id: Date.now(), 
+    text: 'Hey there, I\'m Rico, your finance buddy! Ready to make money stuff way less hectic and a lot more manageable?', 
+    sender: 'ai', // 'ai' or 'rico'
+    timestamp: 'less than a minute ago' 
+  }
+]);
+
+const scrollToBottom = () => {
+  nextTick(() => {
+    const area = chatMessagesAreaRef.value;
+    if (area) {
+      area.scrollTop = area.scrollHeight;
     }
+  });
+};
+
+const handleSuggestionClick = (event) => {
+  const buttonText = event.target.textContent;
+  chatInputValue.value = buttonText;
+  // Optionally, send the suggestion as a message immediately
+  // handleSendMessage();
+};
+
+const handleFileUpload = async (event) => {
+  const file = event.target.files[0];
+  if (!file) {
+    console.log('No file selected');
+    return;
+  }
+  if (file.type !== 'application/pdf') {
+    alert('Please upload a PDF file.');
     if (fileInputRef.value) {
       fileInputRef.value.value = '';
     }
+    return;
+  }
+
+  lastUploadedFileName.value = file.name;
+  pdfProcessingStatus.value = 'processing';
+  const processingMessage = {
+    id: Date.now(),
+    text: `Processing ${file.name}...`,
+    sender: 'ai',
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  };
+  messages.value.push(processingMessage);
+  scrollToBottom();
+
+  const formData = new FormData();
+  formData.append('files', file); // Key is 'files' as per api.js comment
+  formData.append('session_id', sessionId.value);
+  // Optionally, send an empty message or a system message if the API requires a 'message' field
+  // formData.append('message', '');
+
+  try {
+    const response = await sendChatMessageV2(formData);
+    
+    // Remove "processing" message
+    messages.value.pop();
+
+    if (response && response.data) {
+      // Assuming the response for a file upload might be a confirmation or initial analysis
+      let responseText = response.data.reply || response.data.message || `Successfully uploaded ${lastUploadedFileName.value}. You can now ask questions about it.`;
+      
+      const successMessage = {
+        id: Date.now(),
+        text: responseText,
+        sender: 'ai',
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      messages.value.push(successMessage);
+      pdfProcessingStatus.value = 'success';
+    } else {
+      throw new Error('Invalid response from server after file upload.');
+    }
+  } catch (error) {
+    console.error('Error uploading or processing PDF via sendChatMessageV2:', error);
+    if (messages.value.length > 0 && messages.value[messages.value.length - 1].text.startsWith('Processing')) {
+      messages.value.pop(); // Remove "processing" message if still there
+    }
+    const errorMessageText = error.response?.data?.error || error.response?.data?.message || error.message || `Could not process ${lastUploadedFileName.value}.`;
+    const pdfError = {
+      id: Date.now(),
+      text: errorMessageText,
+      sender: 'ai',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    messages.value.push(pdfError);
+    pdfProcessingStatus.value = 'error';
+  } finally {
+    if (fileInputRef.value) {
+      fileInputRef.value.value = '';
+    }
+    scrollToBottom();
   }
 };
 
 const handleSendMessage = async () => {
-  if (!userMessage.value.trim() && !selectedFile.value) {
-    chatError.value = 'Please enter a message or select a file.';
-    return;
-  }
+  const text = chatInputValue.value.trim();
+  if (!text) return;
 
-  const currentMessageText = userMessage.value.trim();
-  if (currentMessageText) {
-    conversation.value.push({ sender: 'user', text: currentMessageText });
-  }
-  if (selectedFile.value) {
-    // Optionally, add a message indicating a file is being sent
-    conversation.value.push({ sender: 'user', text: `(Sending file: ${selectedFile.value.name})` });
-  }
-  
-  chatError.value = '';
+  const userMessage = {
+    id: Date.now(),
+    text: text,
+    sender: 'user',
+    timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  };
+  messages.value.push(userMessage);
+  chatInputValue.value = '';
+  scrollToBottom();
 
   const formData = new FormData();
-  formData.append('message', currentMessageText);
+  formData.append('message', text); // Key is 'message'
   formData.append('session_id', sessionId.value);
-
-  if (selectedFile.value) {
-    formData.append('files', selectedFile.value);
-  }
+  // If a file was just uploaded and the API requires file context to be re-sent or referenced,
+  // that logic would go here. For now, assuming session_id handles context.
 
   try {
     const response = await sendChatMessageV2(formData);
-    const result = response.data;
-
-    if (result.response) {
-      conversation.value.push({ sender: 'ai', text: result.response });
-    }
-    if (result.traceback) {
-      console.log('AI Traceback:', result.traceback);
-    }
-    if (!result.response && !result.traceback) { // If response is empty but no error from backend
-        console.log('Received empty response from AI:', result);
-        // conversation.value.push({ sender: 'ai', text: '[AI returned an empty response]' });
+    
+    let aiReplyText = "Sorry, I couldn't get a response.";
+    if (response && response.data) {
+        aiReplyText = response.data.reply || response.data.message || aiReplyText;
     }
 
-    // Clear inputs after successful send
-    userMessage.value = '';
-    selectedFile.value = null;
-    if (fileInputRef.value) {
-      fileInputRef.value.value = '';
-    }
+    const aiMessage = {
+      id: Date.now() + 1,
+      text: aiReplyText,
+      sender: 'ai',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    messages.value.push(aiMessage);
+    scrollToBottom();
 
   } catch (error) {
-    console.error('Chat V2 error:', error);
-    let errorMessage = 'Failed to send message. See console for details.';
+    console.error('Error sending message via sendChatMessageV2:', error);
+    let specificDisplayError = 'Oops! Something went wrong. Please try again.';
     if (error.response && error.response.data) {
-      if (error.response.data.detail && typeof error.response.data.detail === 'string') {
-        errorMessage = `Error: ${error.response.data.detail}`;
-      } else if (error.response.data.message) {
-         errorMessage = `Error: ${error.response.data.message}`;
-      } else if (typeof error.response.data === 'string') {
-        errorMessage = `Error: ${error.response.data}`;
-      }
+      specificDisplayError = error.response.data.error || error.response.data.message || specificDisplayError;
     } else if (error.message) {
-      errorMessage = `Error: ${error.message}`;
+      specificDisplayError = error.message;
     }
-    chatError.value = errorMessage;
-    // Optionally add the error to conversation display for more visibility
-    // conversation.value.push({ sender: 'system', text: errorMessage });
+    const errorMessage = {
+      id: Date.now() + 1,
+      text: specificDisplayError,
+      sender: 'ai',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+    };
+    messages.value.push(errorMessage);
+    scrollToBottom();
   }
 };
+
+// Initial scroll to bottom
+nextTick(() => {
+  scrollToBottom();
+});
+
 </script>
 
 <style scoped>
-.chat-view {
-  padding: 20px;
-  font-family: sans-serif;
-  max-width: 800px;
+.chat-view-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh; /* Or a fixed height as per design */
+  max-width: 800px; /* Or as per design */
   margin: auto;
+  background-color: #f0f2f5; /* Light grey background, adjust as per screenshot */
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
 }
 
-.chat-interface {
-  margin-top: 20px;
-  border: 1px solid #eee;
-  padding: 15px;
-  background-color: #fff;
-  border-radius: 8px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+.chat-header {
+  padding: 20px;
+  text-align: center;
+  background-color: #ffffff; /* White background for header */
+  border-bottom: 1px solid #e0e0e0; /* Light border */
 }
 
-.conversation-area {
-  height: 400px;
+.header-title {
+  font-size: 1.8em;
+  color: #1c1e21; /* Dark grey/black */
+  margin-bottom: 5px;
+  font-weight: 600;
+}
+
+.header-tagline {
+  font-size: 0.9em;
+  color: #606770; /* Medium grey */
+}
+
+.chat-messages-area {
+  flex-grow: 1;
+  padding: 20px;
   overflow-y: auto;
-  border: 1px solid #ddd;
-  padding: 10px;
-  margin-bottom: 15px;
-  background-color: #f9f9f9;
-  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start; /* Align messages to the top */
 }
 
 .message {
-  margin-bottom: 12px;
-  padding: 10px 15px;
-  border-radius: 18px; /* More rounded bubbles */
-  line-height: 1.4;
-  max-width: 75%;
-  word-wrap: break-word;
-}
-
-.message.user {
-  background-color: #007bff; /* Primary blue for user */
-  color: white;
-  text-align: left; /* Align user messages to left for consistency, or right if preferred */
-  margin-left: 0; /* Or margin-right: auto; if text-align: left */
-  margin-right: auto; /* Pushes to left if text-align: left */
-  align-self: flex-start; /* For flex context if parent is flex */
-}
-.message.user strong {
-  color: #e6efff; /* Lighter color for "You:" text */
-}
-
-.message.ai {
-  background-color: #e9ecef; /* Light grey for AI */
-  color: #333;
-  text-align: left;
-  margin-right: 0; /* Or margin-left: auto; if text-align: right */
-  margin-left: auto; /* Pushes to right if text-align: left */
-  align-self: flex-start;
-}
-.message.ai strong {
-  color: #555;
-}
-
-
-.input-area {
   display: flex;
-  align-items: center; /* Align items vertically */
-  margin-top: 10px;
+  flex-direction: column;
+  margin-bottom: 15px;
+  max-width: 70%; /* Max width for message bubbles */
 }
 
-.input-area input[type="text"] {
-  flex-grow: 1;
-  padding: 10px;
-  border: 1px solid #ccc;
-  border-radius: 20px; /* Rounded input field */
-  margin-right: 10px;
-  font-size: 1em;
+.rico-message {
+  align-self: flex-start; /* Rico's messages on the left */
 }
 
-.input-area .file-input {
-  /* Basic styling for file input, can be hidden and triggered by a custom button if needed */
-  margin-right: 10px;
-  border: 1px solid #ccc;
-  padding: 7px;
-  border-radius: 20px;
+.rico-message .message-content {
+  background-color: #ffffff; /* White background for Rico's messages */
+  color: #1c1e21; /* Dark text */
+  padding: 12px 18px;
+  border-radius: 18px 18px 18px 0; /* Rounded corners, flat on bottom left */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.user-message {
+  align-self: flex-end; /* User's messages on the right */
+}
+
+.user-message .message-content {
+  background-color: #1877f2; /* Facebook blue for user messages */
+  color: white;
+  padding: 12px 18px;
+  border-radius: 18px 18px 0 18px; /* Rounded corners, flat on bottom right */
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+.user-message .message-timestamp {
+  align-self: flex-end; /* Timestamp on the right for user messages */
+  padding-right: 10px; /* Align with message bubble */
+}
+
+
+.message-timestamp {
+  font-size: 0.75em;
+  color: #8a8d91; /* Lighter grey for timestamp */
+  margin-top: 5px;
+  padding-left: 10px; /* Align with message bubble */
+}
+
+.suggestion-buttons {
+  display: flex;
+  flex-wrap: wrap; /* Allow buttons to wrap on smaller screens */
+  gap: 10px; /* Spacing between buttons */
+  margin-top: 10px; /* Space above suggestion buttons */
+  align-self: flex-start; /* Align with Rico's message */
+  padding-left: 10px; /* Indent slightly */
+}
+
+.suggestion-btn {
+  background-color: #e7f3ff; /* Light blue background */
+  color: #1877f2; /* Facebook blue for text */
+  border: 1px solid #cfe2f3; /* Slightly darker blue border */
+  padding: 8px 15px;
+  border-radius: 20px; /* Pill-shaped buttons */
   font-size: 0.9em;
-  max-width: 150px; /* Limit width */
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
 }
 
-.input-area button {
-  padding: 10px 20px;
-  background-color: #28a745; /* Green for send */
+.suggestion-btn:hover {
+  background-color: #dcebff;
+  border-color: #b9d7f1;
+}
+
+.chat-input-area {
+  padding: 15px 20px;
+  background-color: #ffffff; /* White background for input area */
+  border-top: 1px solid #e0e0e0; /* Light border */
+  display: flex;
+  flex-direction: column; /* Stack upload area and input wrapper */
+  gap: 10px; /* Space between upload and input areas */
+}
+
+.pdf-upload-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pdf-upload-label {
+  font-size: 0.9em;
+  color: #333;
+}
+
+.pdf-upload-input {
+  font-size: 0.9em;
+  padding: 5px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  flex-grow: 1; /* Allow input to take available space */
+}
+
+.input-wrapper {
+  display: flex;
+  align-items: center;
+  background-color: #f0f2f5; /* Light grey background for the input field itself */
+  border-radius: 25px; /* Rounded wrapper */
+  padding: 5px 10px;
+}
+
+.input-icon {
+  font-size: 1.2em;
+  color: #606770; /* Icon color */
+  margin-right: 8px;
+  margin-left: 5px;
+}
+
+.text-input {
+  flex-grow: 1;
+  border: none;
+  outline: none;
+  padding: 10px;
+  font-size: 1em;
+  background-color: transparent; /* Make input transparent to show wrapper's bg */
+  color: #1c1e21;
+}
+
+.text-input::placeholder {
+  color: #8a8d91; /* Placeholder text color */
+}
+
+.send-button {
+  background-color: #1877f2; /* Facebook blue */
   color: white;
   border: none;
   border-radius: 20px; /* Rounded button */
+  padding: 8px 15px;
   cursor: pointer;
-  font-size: 1em;
+  display: flex;
+  align-items: center;
+  font-size: 0.9em;
+  font-weight: 600;
   transition: background-color 0.2s;
 }
 
-.input-area button:hover {
-  background-color: #218838;
+.send-button:hover {
+  background-color: #166fe5; /* Slightly darker blue on hover */
 }
 
-.input-area button:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
+.send-icon {
+  margin-left: 8px;
+  font-size: 1.2em; /* Make icon slightly larger */
 }
 
-.selected-file-info {
-  font-size: 0.9em;
-  color: #555;
-  margin-top: 5px;
-  margin-left: 5px; /* Align with text input roughly */
-}
-
-.error-message {
-  color: #dc3545; /* Bootstrap danger red */
-  font-size: 0.9em;
+.pro-tip {
+  font-size: 0.8em;
+  color: #606770; /* Medium grey */
+  text-align: center;
   margin-top: 10px;
 }
 </style>

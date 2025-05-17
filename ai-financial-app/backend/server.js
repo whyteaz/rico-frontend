@@ -246,13 +246,24 @@ app.post('/api/upload-pdf', upload.single('pdfFile'), async (req, res) => {
 app.post('/api/chat', async (req, res) => {
   const { userMessage } = req.body;
 
+  // --- BEGIN DEBUG LOGGING ---
+  console.log('--- /api/chat HIT ---');
+  console.log('Timestamp:', new Date().toISOString());
+  console.log('Request Body:', JSON.stringify(req.body, null, 2));
+  console.log('Server-side latestExtractedPdfText (first 100 chars):', latestExtractedPdfText ? latestExtractedPdfText.substring(0, 100) + (latestExtractedPdfText.length > 100 ? "..." : "") : "NOT SET OR EMPTY");
+  console.log('Server-side latestExtractedPdfText LENGTH:', latestExtractedPdfText ? latestExtractedPdfText.length : 0);
+  // --- END DEBUG LOGGING ---
+
   if (!userMessage) {
+    console.log('/api/chat: Validation fail - userMessage is required.');
     return res.status(400).json({ error: "userMessage is required." });
   }
 
-  if (!latestExtractedPdfText) {
-    console.log('/api/chat: latestExtractedPdfText is empty.');
-    return res.status(400).json({ error: "Please upload a bank statement first." });
+  // Enhanced check for latestExtractedPdfText: not just existence, but also non-empty string.
+  if (!latestExtractedPdfText || typeof latestExtractedPdfText !== 'string' || latestExtractedPdfText.trim() === "") {
+    console.log('/api/chat: Validation fail - latestExtractedPdfText is empty, not a string, or whitespace only.');
+    console.log('/api/chat: Current latestExtractedPdfText value:', latestExtractedPdfText);
+    return res.status(400).json({ error: "Please upload and successfully process a bank statement first. The document context is missing or empty." });
   }
 
   if (!bailianClient) {
