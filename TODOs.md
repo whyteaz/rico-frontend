@@ -1,0 +1,11 @@
+-   **Dashboard - Data Integration:**
+    -   Replace hardcoded data in [`ai-financial-app/frontend/src/views/DashboardView.vue`](ai-financial-app/frontend/src/views/DashboardView.vue:1) with dynamic data from the backend API (`GET /api/dashboard-data` as mentioned in `PLAN.md`).
+    -   Ensure chart interactivity reflects real data.
+-   **Dashboard - Unit Tests:**
+    -   Create unit tests for the updated [`DashboardView.vue`](ai-financial-app/frontend/src/views/DashboardView.vue:1) component, covering:
+        -   Correct rendering of static content.
+        -   Chart components rendering (mocking chart libraries if necessary).
+        -   Presence of Font Awesome icons.
+-   **Dashboard - Refinements (Optional):**
+    -   Further enhance responsiveness for various screen sizes.
+    -   Consider abstracting chart configurations into reusable helper functions or smaller components if `DashboardView.vue` becomes too large.
