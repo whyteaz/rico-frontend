@@ -65,7 +65,7 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 // Ensure uploads directory exists
-const uploadsDir = path.join(__dirname, 'uploads');
+const uploadsDir = path.join('/tmp', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
@@ -498,32 +498,59 @@ app.post('/api/v2/chat', uploadChatV2.array('files', 5), async (req, res) => {
    }
    
    res.json(serviceResponse);
- } catch (error) {
-   console.error('Error in /api/v2/chat endpoint:', error.message);
-   // Clean up uploaded files in case of error during service call
-   if (files && files.length > 0) {
-     files.forEach(file => {
-       if (file.path && fs.existsSync(file.path)) {
-         fs.unlink(file.path, (unlinkErr) => {
-           if (unlinkErr) {
-             console.error(`Error deleting temporary file ${file.path} after error in /api/v2/chat:`, unlinkErr);
-           } else {
-             console.log(`Temporary file ${file.path} deleted successfully after error in /api/v2/chat.`);
-           }
-         });
-       }
-     });
-   }
-   
-   // Check if the error has a status code (e.g., from Axios error in the service)
-   const statusCode = error.response && error.response.status ? error.response.status : 500;
-   const errorDetail = error.response && error.response.data ? error.response.data : error.message;
-   
-   res.status(statusCode).json({
-     error: "Failed to process chat request via Qwen service.",
-     details: errorDetail
-   });
- }
+      } catch (error) {
+        // --- BEGIN ENHANCED ERROR LOGGING for /api/v2/chat ---
+        console.error('--- ERROR IN /api/v2/chat ENDPOINT ---');
+        console.error('Timestamp:', new Date().toISOString());
+        
+        // Log relevant request data (be mindful of sensitive information if message content is logged more extensively)
+        const { session_id, message, files } = req.body; // Assuming these are in req.body, adjust if they are in req.query or req.params
+        console.error('Request Context:');
+        console.error(`  Session ID: ${session_id || 'N/A'}`);
+        console.error(`  Message Snippet: ${message ? String(message).substring(0, 100) + (String(message).length > 100 ? '...' : '') : 'N/A'}`);
+        console.error(`  Number of Files: ${files && files.length ? files.length : 0}`); // Check files and files.length
+
+        console.error('Error Name:', error.name);
+        console.error('Error Message:', error.message);
+        console.error('Error Stack:', error.stack);
+
+        // If the error object has a response property (e.g., from Axios or other HTTP clients in the service)
+        if (error.response && error.response.data) {
+            console.error('External API Error Response Status:', error.response.status);
+            console.error('External API Error Response Data:', JSON.stringify(error.response.data, null, 2));
+        } else if (error.cause) { // For errors that might have a 'cause'
+            console.error('Error Cause:', error.cause);
+        }
+        // --- END ENHANCED ERROR LOGGING for /api/v2/chat ---
+
+        // Clean up uploaded files in case of error during service call
+        // Ensure req.files exists and is an array before trying to iterate
+        if (req.files && Array.isArray(req.files) && req.files.length > 0) {
+          req.files.forEach(file => {
+            if (file.path && fs.existsSync(file.path)) {
+              fs.unlink(file.path, (unlinkErr) => {
+                if (unlinkErr) {
+                  console.error(`Error deleting temporary file ${file.path} after error in /api/v2/chat:`, unlinkErr);
+                } else {
+                  console.log(`Temporary file ${file.path} deleted successfully after error in /api/v2/chat.`);
+                }
+              });
+            }
+          });
+        }
+        
+        const statusCode = error.response && error.response.status ? error.response.status : 500;
+        const errorDetail = error.response && error.response.data ? error.response.data : (error.message || "An unexpected error occurred.");
+        
+        // Ensure a response is sent if headers haven't been sent already
+        if (!res.headersSent) {
+            res.status(statusCode).json({
+              error: "Failed to process chat request. See server logs for details.", // Simplified generic message
+              details: errorDetail,
+              errorCode: error.name
+            });
+        }
+      }
 });
 
 console.log(`Attempting to start server on port ${port}...`);
